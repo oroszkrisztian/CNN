@@ -82,12 +82,6 @@ def preprocess_image(image_path, target_size=(100, 100)):
         print(f"Error processing {image_path}: {str(e)}")
         return None
 
-def copy_and_preprocess_image(src_path, dst_path, target_size=(64, 64)):
-    """Preprocess and save image to destination"""
-    img = preprocess_image(src_path, target_size)
-    if img is not None:
-        img.save(dst_path, 'PNG')
-
 def visualize_dataset_stats(images, labels):
     """Visualize sample images and dataset statistics"""
     # Get image dimensions
