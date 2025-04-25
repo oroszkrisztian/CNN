@@ -89,14 +89,16 @@ class CNNMaxPool(nn.Module):
         super(CNNMaxPool, self).__init__()
         self.conv_layers = nn.Sequential(
             # First conv block
-            nn.Conv2d(input_shape[0], 8, 3, padding=1),
-            nn.ReLU(),
-            nn.Dropout2d(0.5),
+            nn.Conv2d(input_shape[0], 16, 3, padding=1),  # Increased filters from 8 to 16
+            nn.BatchNorm2d(16),  # Added BatchNorm
+            nn.LeakyReLU(0.1),  # Replaced ReLU with LeakyReLU
+            nn.Dropout2d(0.3),  # Reduced dropout from 0.5
             nn.MaxPool2d(2, 2),
             
             # Second conv block
-            nn.Conv2d(8, 16, 3, padding=1),
-            nn.ReLU(),
+            nn.Conv2d(16, 32, 3, padding=1),  # Increased filters from 16 to 32
+            nn.BatchNorm2d(32),  # Added BatchNorm
+            nn.LeakyReLU(0.1),
             nn.Dropout2d(0.2),
             nn.MaxPool2d(2, 2)
         )
@@ -106,8 +108,9 @@ class CNNMaxPool(nn.Module):
         self.fc_layers = nn.Sequential(
             nn.Flatten(),
             nn.Linear(self.flat_features, 128),
-            nn.ReLU(),
-            nn.Dropout(0.5),
+            nn.BatchNorm1d(128),  # Added BatchNorm
+            nn.LeakyReLU(0.1),
+            nn.Dropout(0.3),  # Reduced dropout from 0.5
             nn.Linear(128, num_classes)
         )
     
@@ -127,12 +130,14 @@ class CNNAvgPool(nn.Module):
         self.conv_layers = nn.Sequential(
             # First conv block
             nn.Conv2d(input_shape[0], 8, 3, padding=1),
+            nn.BatchNorm2d(16),
             nn.ReLU(),
             nn.Dropout2d(0.5),
             nn.AvgPool2d(2, 2),
             
             # Second conv block
             nn.Conv2d(8, 16, 3, padding=1),
+            nn.BatchNorm2d(32),
             nn.ReLU(),
             nn.Dropout2d(0.2),
             nn.AvgPool2d(2, 2)
@@ -143,6 +148,7 @@ class CNNAvgPool(nn.Module):
         self.fc_layers = nn.Sequential(
             nn.Flatten(),
             nn.Linear(self.flat_features, 128),
+            nn.BatchNorm1d(128),
             nn.ReLU(),
             nn.Dropout(0.5),
             nn.Linear(128, num_classes)
