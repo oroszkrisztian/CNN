@@ -111,13 +111,42 @@ def save_metrics_to_excel(metrics, num_classes, conf_matrix, model_info, save_pa
     df.to_excel(save_path, index=False)
     print(f"Metrics saved to {save_path}")
 
+def evaluate_loaded_model(model, test_loader, device):
+    """Evaluate model on test data and return predictions"""
+    model.eval()
+    all_preds = []
+    all_labels = []
+    
+    with torch.no_grad():
+        for inputs, labels in test_loader:
+            inputs, labels = inputs.to(device), labels.to(device)
+            outputs = model(inputs)
+            _, predicted = outputs.max(1)
+            
+            all_preds.extend(predicted.cpu().numpy())
+            all_labels.extend(labels.cpu().numpy())
+    
+    return np.array(all_preds), np.array(all_labels)
+
 def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
     
     # Load the best model
     print("\nLoading best model...")
-    state_dict = torch.load('best_model.pth', weights_only=True)
+    try:
+        import h5py
+        print("Loading H5 model format...")
+        with h5py.File('best_model.h5', 'r') as f:
+            state_dict = {}
+            for name in f.keys():
+                state_dict[name] = torch.from_numpy(f[name][()])
+        print("Successfully loaded H5 model")
+    except Exception as e:
+        print(f"Failed to load H5 model, falling back to PyTorch format: {str(e)}")
+        state_dict = torch.load('best_model.pth', weights_only=True)
+    
+    # Load model info
     with safe_globals(['numpy._core.multiarray._reconstruct']):
         model_info = torch.load('model_info.pth', weights_only=False)
     
@@ -134,8 +163,22 @@ def main():
     model.load_state_dict(state_dict)
     print(f"Loaded {model_type} model")
     
-    # Get confusion matrix from model_info (saved during training)
-    conf_matrix = model_info['confusion_matrix']
+    # Load validation data
+    from train_models import load_processed_data, TrafficSignsDataset
+    from torch.utils.data import DataLoader
+    
+    print("Loading validation data...")
+    data = load_processed_data()
+    val_dataset = TrafficSignsDataset(
+        np.transpose(data['val']['images'], (0, 3, 1, 2)),
+        data['val']['labels']
+    )
+    val_loader = DataLoader(val_dataset, batch_size=32)
+    
+    # Generate predictions and confusion matrix
+    print("Evaluating model...")
+    predictions, true_labels = evaluate_loaded_model(model, val_loader, device)
+    conf_matrix = confusion_matrix(true_labels, predictions)
     
     # Calculate metrics
     metrics = calculate_metrics_per_class(conf_matrix)

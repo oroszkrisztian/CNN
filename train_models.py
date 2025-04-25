@@ -27,7 +27,7 @@ class TrafficSignsDataset(Dataset):
 
 def load_processed_data(base_path='processed_data'):
     """Load and prepare the processed and split dataset"""
-    splits = ['train', 'val', 'test']
+    splits = ['train', 'val']  # Remove 'test' from splits
     data = {}
     
     # First, find all unique labels across all splits
@@ -88,41 +88,36 @@ class CNNMaxPool(nn.Module):
     def __init__(self, input_shape, num_classes):
         super(CNNMaxPool, self).__init__()
         self.conv_layers = nn.Sequential(
-            nn.Conv2d(input_shape[0], 8, 3, padding=1),  # Reduced from 16
+            # First conv block
+            nn.Conv2d(input_shape[0], 8, 3, padding=1),
             nn.ReLU(),
-            nn.Dropout2d(0.3),  # Increased dropout
+            nn.Dropout2d(0.5),
             nn.MaxPool2d(2, 2),
-            nn.Conv2d(8, 16, 3, padding=1),  # Reduced from 32
+            
+            # Second conv block
+            nn.Conv2d(8, 16, 3, padding=1),
             nn.ReLU(),
-            nn.Dropout2d(0.3),
-            nn.MaxPool2d(2, 2),
-            nn.Conv2d(16, 32, 3, padding=1),  # Reduced from 64
-            nn.ReLU(),
-            nn.Dropout2d(0.3),
+            nn.Dropout2d(0.2),
             nn.MaxPool2d(2, 2)
         )
         
         self.flat_features = self._get_flat_features(input_shape)
         
         self.fc_layers = nn.Sequential(
-            nn.Linear(self.flat_features, 128),  # Reduced from 256
-            nn.ReLU(),
-            nn.Dropout(0.6),  # Increased dropout
-            nn.Linear(128, 64),  # Reduced from 128
+            nn.Flatten(),
+            nn.Linear(self.flat_features, 128),
             nn.ReLU(),
             nn.Dropout(0.5),
-            nn.Linear(64, num_classes)
+            nn.Linear(128, num_classes)
         )
     
     def _get_flat_features(self, input_shape):
-        # Helper function to calculate flattened size
         dummy_input = torch.zeros(1, *input_shape)
         output = self.conv_layers(dummy_input)
         return int(np.prod(output.shape[1:]))
     
     def forward(self, x):
         x = self.conv_layers(x)
-        x = x.view(-1, self.flat_features)
         x = self.fc_layers(x)
         return x
 
@@ -130,30 +125,27 @@ class CNNAvgPool(nn.Module):
     def __init__(self, input_shape, num_classes):
         super(CNNAvgPool, self).__init__()
         self.conv_layers = nn.Sequential(
+            # First conv block
             nn.Conv2d(input_shape[0], 8, 3, padding=1),
             nn.ReLU(),
-            nn.Dropout2d(0.3),
+            nn.Dropout2d(0.5),
             nn.AvgPool2d(2, 2),
+            
+            # Second conv block
             nn.Conv2d(8, 16, 3, padding=1),
             nn.ReLU(),
-            nn.Dropout2d(0.3),
-            nn.AvgPool2d(2, 2),
-            nn.Conv2d(16, 32, 3, padding=1),
-            nn.ReLU(),
-            nn.Dropout2d(0.3),
+            nn.Dropout2d(0.2),
             nn.AvgPool2d(2, 2)
         )
         
         self.flat_features = self._get_flat_features(input_shape)
         
         self.fc_layers = nn.Sequential(
+            nn.Flatten(),
             nn.Linear(self.flat_features, 128),
             nn.ReLU(),
-            nn.Dropout(0.6),
-            nn.Linear(128, 64),
-            nn.ReLU(),
             nn.Dropout(0.5),
-            nn.Linear(64, num_classes)
+            nn.Linear(128, num_classes)
         )
     
     def _get_flat_features(self, input_shape):
@@ -163,7 +155,6 @@ class CNNAvgPool(nn.Module):
     
     def forward(self, x):
         x = self.conv_layers(x)
-        x = x.view(-1, self.flat_features)
         x = self.fc_layers(x)
         return x
 
@@ -251,22 +242,34 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
     }
 
 def plot_training_history(history1, history2):
-    """Plot training histories for comparison"""
-    metrics = [('loss', 'Loss'), ('acc', 'Accuracy')]
-    fig, axes = plt.subplots(1, 2, figsize=(15, 5))
-    
-    for idx, (metric, title) in enumerate(metrics):
-        axes[idx].plot(history1[f'train_{metric}'], label=f'MaxPool train')
-        axes[idx].plot(history1[f'val_{metric}'], label=f'MaxPool val')
-        axes[idx].plot(history2[f'train_{metric}'], label=f'AvgPool train')
-        axes[idx].plot(history2[f'val_{metric}'], label=f'AvgPool val')
-        axes[idx].set_title(f'Model {title}')
-        axes[idx].set_xlabel('Epoch')
-        axes[idx].set_ylabel(title)
-        axes[idx].legend()
-    
+    """Plot training histories for comparison and save as PNG"""
+    # Plot Training and Validation Accuracy
+    plt.figure(figsize=(10, 5))
+    plt.plot(history1['train_acc'], label='MaxPool Training Acc')
+    plt.plot(history1['val_acc'], label='MaxPool Validation Acc')
+    plt.plot(history2['train_acc'], label='AvgPool Training Acc')
+    plt.plot(history2['val_acc'], label='AvgPool Validation Acc')
+    plt.title('Model Accuracy')
+    plt.xlabel('Epoch')
+    plt.ylabel('Accuracy')
+    plt.legend()
     plt.tight_layout()
-    plt.show()
+    plt.savefig('accuracy_history.png')
+    plt.close()
+
+    # Plot Training and Validation Loss
+    plt.figure(figsize=(10, 5))
+    plt.plot(history1['train_loss'], label='MaxPool Training Loss')
+    plt.plot(history1['val_loss'], label='MaxPool Validation Loss')
+    plt.plot(history2['train_loss'], label='AvgPool Training Loss')
+    plt.plot(history2['val_loss'], label='AvgPool Validation Loss')
+    plt.title('Model Loss')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig('loss_history.png')
+    plt.close()
 
 def evaluate_model(model, test_loader):
     model.eval()
@@ -275,26 +278,111 @@ def evaluate_model(model, test_loader):
     correct = 0
     total = 0
     
+    print("\nDetailed evaluation:")
     with torch.no_grad():
-        for inputs, labels in test_loader:
+        for batch_idx, (inputs, labels) in enumerate(test_loader):
             inputs, labels = inputs.to(device), labels.to(device)
             outputs = model(inputs)
             _, predicted = outputs.max(1)
             
+            batch_correct = predicted.eq(labels).sum().item()
+            batch_total = labels.size(0)
+            
             all_preds.extend(predicted.cpu().numpy())
             all_labels.extend(labels.cpu().numpy())
             
-            total += labels.size(0)
-            correct += predicted.eq(labels).sum().item()
+            total += batch_total
+            correct += batch_correct
+            
+            print(f"Batch {batch_idx + 1}:")
+            print(f"  Correct predictions: {batch_correct}/{batch_total}")
+            print(f"  Running accuracy: {100. * correct / total:.2f}%")
     
     accuracy = 100. * correct / total
+    print(f"\nFinal test set size: {total} images")
+    print(f"Total correct predictions: {correct}")
     conf_matrix = confusion_matrix(all_labels, all_preds)
     return accuracy, conf_matrix
 
-def main():
+def save_model_h5(model, path):
+    """Save PyTorch model in H5 format if h5py is available"""
+    try:
+        import h5py
+        # Create H5 file
+        with h5py.File(path, 'w') as f:
+            for name, param in model.state_dict().items():
+                f.create_dataset(name, data=param.cpu().numpy())
+        print(f"Model saved in H5 format: {path}")
+    except ImportError:
+        print("Warning: h5py module not found. Model will only be saved in PyTorch format.")
+        print("To save in H5 format, install h5py using: pip install h5py")
+
+def plot_dataset_distribution(data):
+    """Plot the number of samples in each dataset split and per class"""
+    splits = ['train', 'val']  # Remove 'test' from splits
+    
+    # First plot: total samples per split
+    plt.figure(figsize=(15, 5))
+    plt.subplot(1, 2, 1)
+    sample_counts = [len(data[split]['images']) for split in splits]
+    plt.bar(splits, sample_counts)
+    plt.title('Total Samples in Each Dataset Split')
+    plt.ylabel('Number of Samples')
+    for i, count in enumerate(sample_counts):
+        plt.text(i, count, str(count), ha='center', va='bottom')
+    
+    # Second plot: samples per class for each split
+    plt.subplot(1, 2, 2)
+    num_classes = len(np.unique(np.concatenate([data[split]['labels'] for split in splits])))
+    x = np.arange(num_classes)
+    width = 0.3  # Increased width since we only have 2 splits now
+    
+    for i, split in enumerate(splits):
+        class_counts = np.bincount(data[split]['labels'], minlength=num_classes)
+        plt.bar(x + i*width, class_counts, width, label=split)
+    
+    plt.xlabel('Class')
+    plt.ylabel('Number of Samples')
+    plt.title('Samples per Class for Each Split')
+    plt.legend()
+    plt.xticks(x + width/2, range(num_classes))
+    
+    plt.tight_layout()
+    plt.savefig('dataset_distribution.png')
+    plt.close()
+    
+    print("\nDataset distribution:")
+    for split in splits:
+        print(f"\n{split.capitalize()} set:")
+        class_counts = np.bincount(data[split]['labels'])
+        for class_idx, count in enumerate(class_counts):
+            print(f"  Class {class_idx}: {count} samples")
+
+def plot_model_architecture(model, input_shape, filename):
+    """Display text-based model architecture summary"""
+    print(f"\nModel Architecture: {filename}")
+    print("=" * 50)
+    
+    # Print model structure
+    print(model)
+    
+    # Calculate and print parameter count
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    
+    print("\nModel Summary:")
+    print(f"Input shape: {input_shape}")
+    print(f"Total parameters: {total_params:,}")
+    print(f"Trainable parameters: {trainable_params:,}")
+    print("=" * 50)
+
+def train_and_save_models():
     # Load data
     print("Loading processed data...")
     data = load_processed_data()
+    
+    # Plot dataset distribution for train and validation only
+    plot_dataset_distribution({k: data[k] for k in ['train', 'val']})
     
     # Prepare datasets and dataloaders
     batch_size = 32
@@ -306,14 +394,9 @@ def main():
         np.transpose(data['val']['images'], (0, 3, 1, 2)),
         data['val']['labels']
     )
-    test_dataset = TrafficSignsDataset(
-        np.transpose(data['test']['images'], (0, 3, 1, 2)),
-        data['test']['labels']
-    )
     
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=batch_size)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size)
     
     # Create models
     input_shape = (3, data['train']['images'].shape[1], data['train']['images'].shape[2])
@@ -323,56 +406,64 @@ def main():
     model_maxpool = CNNMaxPool(input_shape, num_classes)
     model_avgpool = CNNAvgPool(input_shape, num_classes)
     
+    # Visualize model architectures
+    plot_model_architecture(model_maxpool, input_shape, "maxpool_architecture")
+    plot_model_architecture(model_avgpool, input_shape, "avgpool_architecture")
+    
     # Training parameters
     criterion = nn.CrossEntropyLoss()
-    optimizer_maxpool = optim.Adam(model_maxpool.parameters(), lr=0.00005, weight_decay=0.01)  # Reduced lr, increased weight decay
-    optimizer_avgpool = optim.Adam(model_avgpool.parameters(), lr=0.00005, weight_decay=0.01)
+    optimizer_maxpool = optim.AdamW(model_maxpool.parameters(), lr=0.0002)
+    optimizer_avgpool = optim.AdamW(model_avgpool.parameters(), lr=0.0002)
     
     # Train models
     print("\nTraining MaxPooling model...")
     history_maxpool = train_model(
         model_maxpool, train_loader, val_loader,
         criterion, optimizer_maxpool,
-        num_epochs=30
+        num_epochs=15,
+        patience=10
     )
     
     print("\nTraining AveragePooling model...")
     history_avgpool = train_model(
         model_avgpool, train_loader, val_loader,
         criterion, optimizer_avgpool,
-        num_epochs=30
+        num_epochs=15,
+        patience=10
     )
     
     # Plot training histories
     plot_training_history(history_maxpool, history_avgpool)
     
-    # Evaluate models
-    print("\nModel Evaluation:")
-    acc_maxpool, conf_maxpool = evaluate_model(model_maxpool, test_loader)
-    print(f"MaxPooling Model - Test accuracy: {acc_maxpool:.2f}%")
+    # Compare validation accuracies
+    maxpool_val_acc = max(history_maxpool['val_acc'])
+    avgpool_val_acc = max(history_avgpool['val_acc'])
     
-    acc_avgpool, conf_avgpool = evaluate_model(model_avgpool, test_loader)
-    print(f"AveragePooling Model - Test accuracy: {acc_avgpool:.2f}%")
-    
-    # Save only the better model
-    if acc_maxpool > acc_avgpool:
+    # Save only the better model based on validation accuracy
+    if (maxpool_val_acc > avgpool_val_acc):
         better_model = model_maxpool
         model_type = 'maxpool'
-        conf_matrix = conf_maxpool
-        accuracy = acc_maxpool
+        best_val_acc = maxpool_val_acc
     else:
         better_model = model_avgpool
         model_type = 'avgpool'
-        conf_matrix = conf_avgpool
-        accuracy = acc_avgpool
+        best_val_acc = avgpool_val_acc
     
-    print(f"\nSaving the better model ({model_type})...")
+    print(f"\nSaving the better model ({model_type}) with validation accuracy: {best_val_acc:.2f}%")
+    # Always save in PyTorch format
     torch.save(better_model.state_dict(), 'best_model.pth')
+    print("Model saved in PyTorch format: best_model.pth")
+    
+    # Try to save in H5 format
+    try:
+        save_model_h5(better_model, 'best_model.h5')
+    except Exception as e:
+        print(f"Failed to save in H5 format: {str(e)}")
     
     # Get original label mapping
     all_labels = set()
     label_to_idx = {}
-    for split in ['train', 'val', 'test']:
+    for split in ['train', 'val']:
         split_path = os.path.join('processed_data', split)
         for class_folder in os.listdir(split_path):
             try:
@@ -385,18 +476,24 @@ def main():
     original_labels = sorted(all_labels)
     label_to_idx = {label: idx for idx, label in enumerate(original_labels)}
     
-    # Save model info with both original labels and their mapping
+    # Save model info
     model_info = {
         'model_type': model_type,
-        'input_shape': (3, data['train']['images'].shape[1], data['train']['images'].shape[2]),
-        'num_classes': len(np.unique(data['train']['labels'])),
-        'accuracy': accuracy,
-        'confusion_matrix': conf_matrix,
+        'input_shape': input_shape,
+        'num_classes': num_classes,
+        'validation_accuracy': best_val_acc,
         'original_labels': original_labels,
         'label_mapping': label_to_idx
     }
     torch.save(model_info, 'model_info.pth')
     print("Model and info saved successfully!")
+    
+    return {
+        'model': better_model,
+        'data': {'train': data['train'], 'val': data['val']},
+        'model_type': model_type,
+        'validation_accuracy': best_val_acc
+    }
 
 if __name__ == "__main__":
-    main()
+    train_and_save_models()
