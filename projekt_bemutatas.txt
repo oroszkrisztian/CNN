@@ -1,0 +1,105 @@
+# CNN Projekt Bemutatása
+
+## Projekt Áttekintés
+
+Ez a projekt egy konvolúciós neurális hálózat (CNN) fejlesztésére és kiértékelésére összpontosít a German Traffic Sign Recognition Benchmark (GTSRB) adatkészlet felhasználásával. A projekt célja különböző CNN architektúrák tanítása és összehasonlítása a közlekedési táblák felismerésében.
+
+## Fő Komponensek és Folyamatok
+
+### 1. Adatelőkészítés (`prepare_gtsrb.py`)
+
+- **Véletlenszerű osztályok kiválasztása**: Az eredeti GTSRB adatkészletből 10 véletlenszerűen kiválasztott osztály felhasználása
+- **Adatkiegyensúlyozás**: Minden osztályban 5000 képre bővítjük az adatkészletet adataugmentáció segítségével
+- **Adataugmentációs technikák**: Fényerő és kontraszt módosítása, elforgatás, tükrözés
+- **Adatfelosztás**: Az adatok felosztása tanítási (70%), validációs (15%) és tesztelési (15%) halmazokra
+- **Képfeldolgozás**: A képek átméretezése és normalizálása (64x64 pixel)
+
+### 2. Modell Architektúrák (`train_models.py`)
+
+A projekt két különböző CNN architektúrát implementál és hasonlít össze:
+
+#### CNNMaxPool
+- Konvolúciós rétegek MaxPooling rétegekkel
+- BatchNormalization a tanulás stabilizálására
+- LeakyReLU aktivációs függvények
+- Dropout rétegek a túltanulás csökkentésére
+
+#### CNNAvgPool
+- Hasonló struktúra, de MaxPooling helyett AveragePooling
+- A többi paraméter megegyezik a MaxPool változattal
+
+### 3. Modell Tanítás (`train_models.py`)
+
+- **Optimalizálás**: Adam optimalizáló használata
+- **Veszteségfüggvény**: Keresztentrópia (CrossEntropyLoss)
+- **Tanítási stratégia**: Korai leállítás (early stopping) a túltanulás elkerülésére
+- **Hiperparaméterek**: Batch méret: 32, Learning rate: 0.0001
+- **Modell mentése**: A jobb validációs pontosságot elérő modell mentése PyTorch és H5 formátumban
+
+### 4. Túltanulás Demonstráció (`overfitting_demo.py`)
+
+- Szándékosan túlparaméterezett modell implementálása
+- Túl sok réteg és neuron a túltanulás szemléltetésére
+- Tanulási és validációs görbék vizualizálása a túltanulás szemléltetésére
+
+### 5. Modell Kiértékelés (`evaluate_model.py` és `test.py`)
+
+- **Metrikus kiértékelés**:
+  - Pontosság (Accuracy)
+  - Pozitív prediktív érték (Precision/PPV)
+  - Érzékenység (Recall/TPR)
+  - Specificitás (TNR)
+  - Dice Score
+
+- **Konfúziós mátrix** létrehozása és megjelenítése
+- **Részletes kiértékelés**: Osztályonkénti teljesítménymérés
+- **Excel export**: Minden metrika exportálása osztályonként
+
+## Projekt Kulcsfunkciói
+
+1. **Adatkezelés**:
+   - Strukturált adatbetöltés és -feldolgozás
+   - Adataugmentáció az egyenlőtlen osztályeloszlás kezelésére
+   - Adatok train/val/test felosztása
+
+2. **Modellezés**:
+   - Különböző CNN architektúrák
+   - Szabályos és túltanult modellek összehasonlítása
+   - Hiperparaméter beállítások
+
+3. **Vizualizáció**:
+   - Adateloszlás ábrázolása
+   - Tanulási görbék megjelenítése
+   - Konfúziós mátrix hőtérképek
+
+4. **Kiértékelés**:
+   - Részletes teljesítménymetrikák
+   - Osztályonkénti elemzés
+   - Modell összehasonlítások
+
+## Technikai Részletek
+
+- **Nyelv**: Python
+- **Főbb könyvtárak**: PyTorch, NumPy, Matplotlib, scikit-learn, Pandas
+- **Eszközök**: CUDA GPU gyorsítás (ha elérhető)
+- **Fájlformátumok**: PNG képek, PyTorch és H5 modellmentés
+
+## Eredmények
+
+A projekt két fő CNN architektúrát hasonlít össze (MaxPooling vs AvgPooling), és automatikusan a jobb teljesítményűt menti el. A túltanulás explicit módon bemutatásra kerül egy külön modulban. A részletes eredmények Excel formátumban exportálhatók, és grafikus megjelenítésük is elérhető.
+
+## Projekt Struktúra
+
+- **prepare_gtsrb.py**: Adatelőkészítés és -feldolgozás
+- **train_models.py**: Modellarchitektúrák és tanítási folyamat
+- **overfitting_demo.py**: Túltanulás szemléltetése
+- **evaluate_model.py**: Modell kiértékelése és metrikák számítása
+- **test.py**: Tesztelés a tesztadatokon
+
+## Jövőbeli Fejlesztési Lehetőségek
+
+1. Több architektúra összehasonlítása (ResNet, MobileNet, stb.)
+2. Transzfer tanulás alkalmazása előtanított modellekkel
+3. Hiperparaméter optimalizálás (grid search, random search)
+4. Interpretálhatósági technikák bevezetése (Grad-CAM, LIME)
+5. Modell könnyítése mobil eszközökre (kvantálás, pruning)

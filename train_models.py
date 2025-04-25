@@ -92,14 +92,14 @@ class CNNMaxPool(nn.Module):
             nn.Conv2d(input_shape[0], 16, 3, padding=1),  # Increased filters from 8 to 16
             nn.BatchNorm2d(16),  # Added BatchNorm
             nn.LeakyReLU(0.1),  # Replaced ReLU with LeakyReLU
-            nn.Dropout2d(0.3),  # Reduced dropout from 0.5
+            nn.Dropout2d(0.6),  # Reduced dropout from 0.5
             nn.MaxPool2d(2, 2),
             
             # Second conv block
             nn.Conv2d(16, 32, 3, padding=1),  # Increased filters from 16 to 32
             nn.BatchNorm2d(32),  # Added BatchNorm
             nn.LeakyReLU(0.1),
-            nn.Dropout2d(0.2),
+            nn.Dropout2d(0.4),
             nn.MaxPool2d(2, 2)
         )
         
@@ -129,17 +129,17 @@ class CNNAvgPool(nn.Module):
         super(CNNAvgPool, self).__init__()
         self.conv_layers = nn.Sequential(
             # First conv block
-            nn.Conv2d(input_shape[0], 8, 3, padding=1),
+            nn.Conv2d(input_shape[0], 16, 3, padding=1),
             nn.BatchNorm2d(16),
-            nn.ReLU(),
-            nn.Dropout2d(0.5),
+            nn.LeakyReLU(0.1),
+            nn.Dropout2d(0.6),
             nn.AvgPool2d(2, 2),
             
             # Second conv block
-            nn.Conv2d(8, 16, 3, padding=1),
+            nn.Conv2d(16, 32, 3, padding=1),
             nn.BatchNorm2d(32),
-            nn.ReLU(),
-            nn.Dropout2d(0.2),
+            nn.LeakyReLU(0.1),
+            nn.Dropout2d(0.4),
             nn.AvgPool2d(2, 2)
         )
         
@@ -149,8 +149,8 @@ class CNNAvgPool(nn.Module):
             nn.Flatten(),
             nn.Linear(self.flat_features, 128),
             nn.BatchNorm1d(128),
-            nn.ReLU(),
-            nn.Dropout(0.5),
+            nn.LeakyReLU(0.1),
+            nn.Dropout(0.3),
             nn.Linear(128, num_classes)
         )
     
@@ -418,15 +418,15 @@ def train_and_save_models():
     
     # Training parameters
     criterion = nn.CrossEntropyLoss()
-    optimizer_maxpool = optim.AdamW(model_maxpool.parameters(), lr=0.0002)
-    optimizer_avgpool = optim.AdamW(model_avgpool.parameters(), lr=0.0002)
+    optimizer_maxpool = optim.AdamW(model_maxpool.parameters(), lr=0.0001)
+    optimizer_avgpool = optim.AdamW(model_avgpool.parameters(), lr=0.0001)
     
     # Train models
     print("\nTraining MaxPooling model...")
     history_maxpool = train_model(
         model_maxpool, train_loader, val_loader,
         criterion, optimizer_maxpool,
-        num_epochs=15,
+        num_epochs=30,
         patience=10
     )
     
@@ -434,7 +434,7 @@ def train_and_save_models():
     history_avgpool = train_model(
         model_avgpool, train_loader, val_loader,
         criterion, optimizer_avgpool,
-        num_epochs=15,
+        num_epochs=30,
         patience=10
     )
     

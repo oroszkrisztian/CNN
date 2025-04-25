@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, Subset
 import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
@@ -21,10 +21,10 @@ class TrafficSignsDataset(Dataset):
     def __getitem__(self, idx):
         return self.images[idx], self.labels[idx]
 
-class OverfittingModel(nn.Module):
+class ExtremeOverfittingModel(nn.Module):
     def __init__(self, input_shape, num_classes):
-        super(OverfittingModel, self).__init__()
-        # Excessive number of layers and parameters
+        super(ExtremeOverfittingModel, self).__init__()
+        # More reasonable model architecture that can still overfit
         self.conv_layers = nn.Sequential(
             nn.Conv2d(input_shape[0], 64, 3, padding=1),
             nn.ReLU(),
@@ -42,22 +42,17 @@ class OverfittingModel(nn.Module):
             nn.ReLU(),
             nn.Conv2d(256, 256, 3, padding=1),
             nn.ReLU(),
-            nn.Conv2d(256, 256, 3, padding=1),
-            nn.ReLU(),
             nn.MaxPool2d(2, 2),
         )
         
         self.flat_features = self._get_flat_features(input_shape)
         
-        # Very large fully connected layers
         self.fc_layers = nn.Sequential(
-            nn.Linear(self.flat_features, 2048),
+            nn.Linear(self.flat_features, 512),
             nn.ReLU(),
-            nn.Linear(2048, 1024),
+            nn.Linear(512, 256),
             nn.ReLU(),
-            nn.Linear(1024, 512),
-            nn.ReLU(),
-            nn.Linear(512, num_classes)
+            nn.Linear(256, num_classes)
         )
     
     def _get_flat_features(self, input_shape):
@@ -71,8 +66,8 @@ class OverfittingModel(nn.Module):
         x = self.fc_layers(x)
         return x
 
-def load_data(base_path='processed_data'):
-    """Load and prepare the processed dataset"""
+def load_data(base_path='processed_data', reduce_train=0.3, reduce_val=0.8):
+    """Load and prepare the processed dataset, with options to reduce data size to encourage overfitting"""
     splits = ['train', 'val']
     data = {}
     
@@ -123,17 +118,37 @@ def load_data(base_path='processed_data'):
             'labels': np.array(labels)
         }
         
+        # Reduce dataset size to encourage overfitting
+        if split == 'train' and reduce_train < 1.0:
+            n_samples = int(len(data[split]['images']) * reduce_train)
+            indices = np.random.choice(len(data[split]['images']), n_samples, replace=False)
+            data[split]['images'] = data[split]['images'][indices]
+            data[split]['labels'] = data[split]['labels'][indices]
+            print(f"Reduced {split} set to {n_samples} samples to encourage overfitting")
+        
+        if split == 'val' and reduce_val < 1.0:
+            n_samples = int(len(data[split]['images']) * reduce_val)
+            indices = np.random.choice(len(data[split]['images']), n_samples, replace=False)
+            data[split]['images'] = data[split]['images'][indices]
+            data[split]['labels'] = data[split]['labels'][indices]
+            print(f"Reduced {split} set to {n_samples} samples")
+        
         # Validate labels
         unique_labels = np.unique(data[split]['labels'])
         print(f"\n{split} set - Unique labels found: {unique_labels}")
         print(f"Min label: {unique_labels.min()}, Max label: {unique_labels.max()}")
+        print(f"{split} set size: {len(data[split]['images'])} images")
     
     return data
 
-def train_model(model, train_loader, val_loader, num_epochs=100):
+def train_model(model, train_loader, val_loader, num_epochs=30):
     model = model.to(device)
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=0.001)
+    # Higher learning rate to encourage overfitting
+    optimizer = optim.Adam(model.parameters(), lr=0.001)  # Reduced learning rate for stability
+    
+    # Add scheduler to reduce learning rate if validation loss plateaus
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=3, factor=0.5)
     
     train_losses = []
     val_losses = []
@@ -173,9 +188,8 @@ def train_model(model, train_loader, val_loader, num_epochs=100):
         correct = 0
         total = 0
         
-        val_pbar = tqdm(val_loader, desc=f'Validation batch', leave=False)
         with torch.no_grad():
-            for inputs, labels in val_pbar:
+            for inputs, labels in val_loader:
                 inputs, labels = inputs.to(device), labels.to(device)
                 outputs = model(inputs)
                 loss = criterion(outputs, labels)
@@ -184,12 +198,15 @@ def train_model(model, train_loader, val_loader, num_epochs=100):
                 _, predicted = outputs.max(1)
                 total += labels.size(0)
                 correct += predicted.eq(labels).sum().item()
-                val_pbar.set_postfix({'loss': f'{loss.item():.4f}'})
         
         val_loss = val_loss / len(val_loader)
         val_acc = 100. * correct / total
         val_losses.append(val_loss)
         val_accs.append(val_acc)
+        
+        print(f"Epoch {epoch+1}/{num_epochs}:                                                                                                                            ")
+        print(f"Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.2f}%")
+        print(f"Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.2f}%")
 
     return {
         'train_loss': train_losses,
@@ -223,10 +240,11 @@ def plot_training_curves(history):
 
 def main():
     print("Loading data...")
-    data = load_data()
+    # Load data with reduced sizes to encourage overfitting
+    data = load_data(reduce_train=0.1, reduce_val=0.8)  # Further reduce training data
     
     # Prepare datasets
-    batch_size = 32
+    batch_size = 16  # Smaller batch size for better overfitting
     train_dataset = TrafficSignsDataset(
         np.transpose(data['train']['images'], (0, 3, 1, 2)),
         data['train']['labels']
@@ -243,11 +261,12 @@ def main():
     input_shape = (3, data['train']['images'].shape[1], data['train']['images'].shape[2])
     num_classes = len(np.unique(data['train']['labels']))
     
-    print("Creating model...")
-    model = OverfittingModel(input_shape, num_classes)
+    print("Creating overfitting model...")
+    model = ExtremeOverfittingModel(input_shape, num_classes)
+    print(f"Model has {sum(p.numel() for p in model.parameters())} parameters")
     
-    print("Training model...")
-    history = train_model(model, train_loader, val_loader)
+    print("Training overfitting model...")
+    history = train_model(model, train_loader, val_loader, num_epochs=50)  # Increase epochs
     
     print("Plotting results...")
     plot_training_curves(history)

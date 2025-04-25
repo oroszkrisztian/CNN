@@ -5,6 +5,7 @@ import numpy as np
 from PIL import Image
 import os
 from tqdm import tqdm
+import matplotlib.pyplot as plt
 from train_models import CNNMaxPool, CNNAvgPool, TrafficSignsDataset
 
 def load_test_data(test_path='processed_data/test'):
@@ -65,7 +66,8 @@ def test_model():
     # Test the model
     correct = 0
     total = 0
-    predictions = []
+    all_predictions = []
+    all_labels = []
     
     print("\nTesting model...")
     with torch.no_grad():
@@ -76,7 +78,8 @@ def test_model():
             
             total += labels.size(0)
             correct += predicted.eq(labels).sum().item()
-            predictions.extend(predicted.cpu().numpy())
+            all_predictions.extend(predicted.cpu().numpy())
+            all_labels.extend(labels.cpu().numpy())
     
     accuracy = 100. * correct / total
     print(f"\nTest Results:")
@@ -88,7 +91,7 @@ def test_model():
     # Print per-class results
     class_correct = {}
     class_total = {}
-    for pred, label in zip(predictions, test_labels):
+    for pred, label in zip(all_predictions, all_labels):
         if label not in class_total:
             class_total[label] = 0
             class_correct[label] = 0
@@ -97,10 +100,54 @@ def test_model():
             class_correct[label] += 1
     
     print("\nPer-class accuracy:")
+    class_accuracies = {}
+    reverse_mapping = {v: k for k, v in model_info['label_mapping'].items()}
+    
     for label in sorted(class_total.keys()):
         class_acc = 100. * class_correct[label] / class_total[label]
-        original_label = [k for k, v in model_info['label_mapping'].items() if v == label][0]
+        original_label = reverse_mapping[label]
+        class_accuracies[original_label] = class_acc
         print(f"Original class {original_label} (mapped to {label}): {class_acc:.2f}% ({class_correct[label]}/{class_total[label]})")
+    
+    # Plot class accuracies
+    plot_class_accuracies(class_accuracies)
+
+def plot_class_accuracies(class_accuracies):
+    """
+    Plot bar chart of per-class accuracies with percentage labels inside the bars
+    """
+    plt.figure(figsize=(15, 8))
+    
+    # Sort classes by accuracy
+    sorted_classes = sorted(class_accuracies.items(), key=lambda x: x[1], reverse=True)
+    classes = [str(c[0]) for c in sorted_classes]
+    accuracies = [c[1] for c in sorted_classes]
+    
+    # Plot bar chart
+    bars = plt.bar(classes, accuracies, color='skyblue')
+    
+    # Add a horizontal line for average accuracy
+    avg_acc = sum(accuracies) / len(accuracies)
+    plt.axhline(y=avg_acc, color='r', linestyle='-', label=f'Average Accuracy: {avg_acc:.2f}%')
+    
+    # Highlight bars with below-average accuracy and add percentage text
+    for i, (bar, acc) in enumerate(zip(bars, accuracies)):
+        if acc < avg_acc:
+            bar.set_color('salmon')
+        
+        # Add text with accuracy percentage inside each bar
+        height = bar.get_height()
+        plt.text(bar.get_x() + bar.get_width()/2., height/2.,
+                f'{acc:.1f}%', ha='center', va='center', color='black', fontweight='bold')
+    
+    plt.title('Per-Class Accuracy')
+    plt.xlabel('Traffic Sign Class')
+    plt.ylabel('Accuracy (%)')
+    plt.xticks(rotation=90)
+    plt.tight_layout()
+    plt.legend()
+    plt.savefig('chart_test_result.png')
+    plt.show()
 
 if __name__ == "__main__":
     test_model()

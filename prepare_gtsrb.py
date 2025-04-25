@@ -7,6 +7,11 @@ from sklearn.model_selection import train_test_split
 from PIL import ImageEnhance, ImageOps
 import matplotlib.pyplot as plt
 import random
+from tqdm import tqdm
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def get_available_classes(base_path='gtsrb/Final_Training/Images'):
     """Get all available class IDs from the dataset"""
@@ -63,7 +68,7 @@ def create_directory_structure(base_dir='processed_data'):
             path = os.path.join(base_dir, split, str(class_id))
             os.makedirs(path, exist_ok=True)
 
-def preprocess_image(image_path, target_size=(64, 64)):
+def preprocess_image(image_path, target_size=(100, 100)):
     """Preprocess a single image"""
     try:
         with Image.open(image_path) as img:
@@ -196,20 +201,20 @@ def augment_class_to_target(images, labels, class_id, target_count):
     class_images = [img for img, lbl in zip(images, labels) if lbl == class_id]
     augmented_images = []
     augmented_labels = []
-    
+
     # First add all original images
     augmented_images.extend(class_images)
     augmented_labels.extend([class_id] * len(class_images))
-    
+
     # Calculate how many augmented images we need per original image
     needed = target_count - len(class_images)
     if needed <= 0:
         return augmented_images, augmented_labels
-    
+
     augs_per_image = needed // len(class_images) + 1
-    
+
     # Generate augmented images
-    for img_path in class_images:
+    for img_path in tqdm(class_images, desc=f"Augmenting class {class_id}"):
         img = preprocess_image(img_path)
         if img is not None:
             for _ in range(augs_per_image):
@@ -223,14 +228,95 @@ def augment_class_to_target(images, labels, class_id, target_count):
                 aug_img.save(aug_path)
                 augmented_images.append(aug_path)
                 augmented_labels.append(class_id)
-                
+
     return augmented_images[:target_count], augmented_labels[:target_count]
 
+def save_size_distribution_plot(images, output_path='size_distribution.png'):
+    """Save a scatter plot of image size distribution."""
+    dimensions = []
+    for img_path in images:
+        with Image.open(img_path) as img:
+            dimensions.append(img.size)
+
+    widths, heights = zip(*dimensions)
+
+    plt.figure(figsize=(10, 6))
+    plt.scatter(widths, heights, alpha=0.5)
+    plt.title('Image Size Distribution')
+    plt.xlabel('Width (pixels)')
+    plt.ylabel('Height (pixels)')
+    plt.grid(True, linestyle='--', alpha=0.7)
+    plt.savefig(output_path)
+    plt.close()
+
+def save_split_size_distribution(splits, output_dir='size_distributions'):
+    """Save size distribution plots for each split as PNG files."""
+    os.makedirs(output_dir, exist_ok=True)
+    for split_name, (images, _) in tqdm(splits.items(), desc="Saving size distribution for splits"):
+        dimensions = []
+        for img_path in tqdm(images, desc=f"Processing {split_name} images", leave=False):
+            with Image.open(img_path) as img:
+                dimensions.append(img.size)
+
+        widths, heights = zip(*dimensions)
+
+        plt.figure(figsize=(10, 6))
+        plt.scatter(widths, heights, alpha=0.5)
+        plt.title(f'{split_name.capitalize()} Split Size Distribution')
+        plt.xlabel('Width (pixels)')
+        plt.ylabel('Height (pixels)')
+        plt.grid(True, linestyle='--', alpha=0.7)
+        output_path = os.path.join(output_dir, f'{split_name}_size_distribution.png')
+        plt.savefig(output_path)
+        plt.close()
+
+def skip_steps_if_folders_exist():
+    """Check if required folders exist and skip steps if they do."""
+    if os.path.exists('augmented_data') and os.path.exists('processed_data'):
+        print("Folders 'augmented_data' and 'processed_data' already exist. Skipping augmentation and processing steps.")
+        return True
+    return False
+
 def main():
+    # Check if folders exist to skip steps
+    if skip_steps_if_folders_exist():
+        # Load processed splits
+        processed_splits = {'train': [], 'val': [], 'test': []}
+        processed_labels = {'train': [], 'val': [], 'test': []}
+
+        for split_name in processed_splits.keys():
+            split_dir = os.path.join('processed_data', split_name)
+            for class_id in SELECTED_CLASSES:
+                class_dir = os.path.join(split_dir, str(class_id))
+                if os.path.exists(class_dir):
+                    for img_file in os.listdir(class_dir):
+                        img_path = os.path.join(class_dir, img_file)
+                        processed_splits[split_name].append(img_path)
+                        processed_labels[split_name].append(class_id)
+
+        final_splits = {
+            name: (paths, labels) 
+            for name, (paths, labels) in zip(
+                processed_splits.keys(),
+                [(processed_splits[k], processed_labels[k]) for k in processed_splits.keys()]
+            )
+        }
+
+        # Save size distribution for each split
+        print("\nSaving size distribution for each split...")
+        save_split_size_distribution(final_splits)
+
+        print("Data preparation completed!")
+        return
+
     # Load all image paths and labels
     print("Loading GTSRB dataset...")
     images, labels = load_gtsrb_data()
-    
+
+    # Save size distribution plot
+    print("Saving size distribution plot...")
+    save_size_distribution_plot(images)
+
     # Show raw data distribution
     print("\nRaw data distribution before augmentation:")
     initial_data = {'raw': (images, labels)}
@@ -240,8 +326,8 @@ def main():
     print("\nAugmenting data to reach 5000 images per class...")
     balanced_images = []
     balanced_labels = []
-    
-    for class_id in SELECTED_CLASSES:
+
+    for class_id in tqdm(SELECTED_CLASSES, desc="Processing classes"):
         print(f"Processing class {class_id}...")
         class_images, class_labels = augment_class_to_target(
             images, labels, class_id, IMAGES_PER_CLASS
@@ -278,10 +364,15 @@ def main():
     
     for split_name, (X, y) in splits.items():
         print(f"Processing {split_name} split...")
-        for img_path, label in zip(X, y):
+        for img_path, label in tqdm(zip(X, y), desc=f"Processing {split_name} split", total=len(X)):
             base_filename = os.path.splitext(os.path.basename(img_path))[0]
             save_path = os.path.join('processed_data', split_name, str(label), f"{base_filename}.png")
-            
+
+            # Check if the file exists before processing or copying
+            if not os.path.exists(img_path):
+                logging.warning(f"File not found: {img_path}. Skipping.")
+                continue
+
             # If it's an original image, process it; if augmented, just copy
             if 'augmented_data' not in img_path:
                 img = preprocess_image(img_path)
@@ -289,7 +380,7 @@ def main():
                     img.save(save_path, 'PNG')
             else:
                 shutil.copy2(img_path, save_path)
-                
+
             processed_splits[split_name].append(save_path)
             processed_labels[split_name].append(label)
     
@@ -302,10 +393,18 @@ def main():
             [(processed_splits[k], processed_labels[k]) for k in processed_splits.keys()]
         )
     }
-    
+
     log_split_stats(processed_splits, processed_labels)
     visualize_split_distribution(final_splits)
-    
+
+    # Show size distribution for each split
+    print("\nChecking size distribution for each split...")
+    show_split_size_distribution(final_splits)
+
+    # Save size distribution for each split
+    print("\nSaving size distribution for each split...")
+    save_split_size_distribution(final_splits)
+
     print("Data preparation completed!")
 
 if __name__ == "__main__":
